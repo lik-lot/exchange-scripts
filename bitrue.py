@@ -54,6 +54,7 @@ logging.basicConfig(
 BITRUE_API = "https://openapi.bitrue.com"
 TICKER_ENDPOINT = "/api/v1/ticker/24hr"
 
+
 def fetch_bitrue_all_spot_symbols() -> List[str]:
     """
     Return all symbols from Bitrue.

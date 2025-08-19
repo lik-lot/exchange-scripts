@@ -55,6 +55,7 @@ logging.basicConfig(
 BTSE_API = "https://api.btse.com"
 MARKET_SUMMARY_ENDPOINT = "/spot/api/v3.2/market_summary"
 
+
 def btse_to_tv_symbol(btse_symbol: str) -> str:
     """Convert BTSE symbol format to TradingView format"""
     # Based on test results: BTC-USD → BTCUSD (remove dash)

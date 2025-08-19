@@ -54,6 +54,7 @@ logging.basicConfig(
 BITMART_API = "https://api-cloud.bitmart.com"
 SYMBOLS_ENDPOINT = "/spot/v1/symbols"
 
+
 def fetch_bitmart_all_spot_symbols() -> List[str]:
     """
     Return all symbols from BitMart.

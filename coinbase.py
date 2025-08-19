@@ -54,6 +54,11 @@ logging.basicConfig(
 COINBASE_API = "https://api.exchange.coinbase.com"
 PRODUCTS_ENDPOINT = "/products"
 
+def coinbase_to_tv_symbol(coinbase_symbol: str) -> str:
+    """Convert Coinbase symbol format to TradingView format"""
+    # Based on test results: BTC-USD → BTCUSD (remove dash)
+    return coinbase_symbol.replace("-", "").upper()
+
 def fetch_coinbase_all_spot_symbols() -> List[str]:
     """
     Return all active symbols from COINBASE.
@@ -88,12 +93,13 @@ def fetch_coinbase_all_spot_symbols() -> List[str]:
             if quote_coin not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (BTC-USD → BTCUSD)
+        tv_symbol = coinbase_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))

@@ -77,8 +77,13 @@ def fetch_cryptocom_all_spot_symbols() -> List[str]:
 
     syms = []
     for s in instruments_data:
-        # Get the symbol name (Crypto.com uses 'instrument_name' field)
-        sym = s.get("instrument_name", "")
+        # Include SPOT and MARGIN instruments (exclude futures/perpetuals)
+        inst_type = s.get("inst_type", "")
+        if inst_type not in ["SPOT", "MARGIN"]:
+            continue
+            
+        # Get the symbol name (Crypto.com uses 'symbol' field)
+        sym = s.get("symbol", "")
         if not sym:
             continue
 

@@ -52,7 +52,7 @@ logging.basicConfig(
 
 # ─────────────────── 1. Load Symbols (Direct query from WHITEBIT) ─────────────────
 WHITEBIT_API = "https://whitebit.com"
-MARKETS_ENDPOINT = "/api/v4/public/markets"
+MARKETS_ENDPOINT = "/api/v4/public/ticker"
 
 def fetch_whitebit_all_spot_symbols() -> List[str]:
     """
@@ -78,10 +78,8 @@ def fetch_whitebit_all_spot_symbols() -> List[str]:
 
     syms = []
     for symbol_key, market_info in markets_data.items():
-        # Check if market type is spot and trades are enabled
-        if market_info.get("type") != "spot":
-            continue
-        if not market_info.get("tradesEnabled", False):
+        # Skip frozen markets
+        if market_info.get("isFrozen", True):
             continue
 
         sym = symbol_key
