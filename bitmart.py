@@ -77,15 +77,22 @@ def fetch_bitmart_all_spot_symbols() -> List[str]:
 
     syms = []
     for s in symbols_data:
-        # Get the symbol name
-        sym = s.get("symbol", "")
+        # BitMart returns symbols as strings, not objects
+        sym = s if isinstance(s, str) else str(s)
         if not sym:
             continue
 
         # Apply quote currency filter if specified
         if QUOTE_FILTER:
-            quote_currency = s.get("quote_currency", "")
-            if quote_currency not in QUOTE_FILTER:
+            # For string symbols, extract quote currency from symbol name
+            # Most symbols follow BASE_QUOTE format
+            parts = sym.split('_')
+            if len(parts) >= 2:
+                quote_currency = parts[-1]
+                if quote_currency not in QUOTE_FILTER:
+                    continue
+            else:
+                # Skip symbols that don't match expected format if filter is active
                 continue
 
         # Apply manual mapping (handle exception cases)
