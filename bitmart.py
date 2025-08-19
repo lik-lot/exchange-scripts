@@ -54,6 +54,16 @@ logging.basicConfig(
 BITMART_API = "https://api-cloud.bitmart.com"
 SYMBOLS_ENDPOINT = "/spot/v1/symbols"
 
+def is_valid_symbol(symbol: str) -> bool:
+    """Check if symbol is valid for TradingView (no special characters)"""
+    # Skip symbols with special characters that TradingView doesn't support
+    invalid_chars = ['$', '(', ')', '[', ']', '{', '}', '@', '#', '%']
+    return not any(char in symbol for char in invalid_chars)
+
+def bitmart_to_tv_symbol(bitmart_symbol: str) -> str:
+    """Convert BitMart symbol format to TradingView format"""
+    # Remove underscores: 1INCH_USDT → 1INCHUSDT
+    return bitmart_symbol.replace("_", "").upper()
 
 def fetch_bitmart_all_spot_symbols() -> List[str]:
     """
@@ -96,12 +106,17 @@ def fetch_bitmart_all_spot_symbols() -> List[str]:
                 # Skip symbols that don't match expected format if filter is active
                 continue
 
+        # Skip symbols with special characters
+        if not is_valid_symbol(sym):
+            continue
+            
+        # Convert to TradingView format (remove underscores)
+        tv_symbol = bitmart_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
