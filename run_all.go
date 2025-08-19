@@ -29,7 +29,7 @@ func runPythonScript(scriptPath string, current int, total int) ScriptResult {
 
 	cmd := exec.Command("python3", scriptPath)
 	cmd.Dir = filepath.Dir(scriptPath)
-	
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -62,7 +62,6 @@ func main() {
 
 	pythonScripts := []string{
 		"biconomy.py",
-		"bigone.py",
 		"binance.py",
 		"bitget.py",
 		"bitmart.py",
@@ -87,6 +86,7 @@ func main() {
 		"pionex.py",
 		"toobit.py",
 		"whitebit.py",
+		"bigone.py",
 	}
 
 	validScripts := []string{}
@@ -109,7 +109,7 @@ func main() {
 		scriptPath := filepath.Join(scriptDir, script)
 		result := runPythonScript(scriptPath, i+1, len(validScripts))
 		results = append(results, result)
-		
+
 		if i < len(validScripts)-1 {
 			fmt.Println()
 		}
