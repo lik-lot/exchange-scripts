@@ -6,8 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -19,19 +17,23 @@ type ScriptResult struct {
 	Output   string
 }
 
-func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- ScriptResult, completed *int64, total int) {
-	defer wg.Done()
-
+func runPythonScript(scriptPath string, current int, total int) ScriptResult {
 	start := time.Now()
 	scriptName := filepath.Base(scriptPath)
 	scriptName = strings.TrimSuffix(scriptName, ".py")
 
-	fmt.Printf("Starting %s...\n", scriptName)
+	progress := float64(current) / float64(total) * 100
+	fmt.Printf("🔄 [%d/%d - %.1f%%] Starting %s...\n", current, total, progress, scriptName)
+	fmt.Printf("📋 Output from %s:\n", scriptName)
+	fmt.Println(strings.Repeat("-", 40))
 
 	cmd := exec.Command("python3", scriptPath)
 	cmd.Dir = filepath.Dir(scriptPath)
+	
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	duration := time.Since(start)
 
 	result := ScriptResult{
@@ -39,19 +41,17 @@ func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- Scrip
 		Success:  err == nil,
 		Duration: duration,
 		Error:    err,
-		Output:   string(output),
+		Output:   "",
 	}
 
-	completedCount := atomic.AddInt64(completed, 1)
-	progress := float64(completedCount) / float64(total) * 100
-
+	fmt.Println(strings.Repeat("-", 40))
 	if err == nil {
-		fmt.Printf("✓ %s completed in %v [%d/%d - %.1f%%]\n", scriptName, duration, completedCount, total, progress)
+		fmt.Printf("✓ [%d/%d - %.1f%%] %s completed in %v\n", current, total, progress, scriptName, duration)
 	} else {
-		fmt.Printf("✗ %s failed in %v: %v [%d/%d - %.1f%%]\n", scriptName, duration, err, completedCount, total, progress)
+		fmt.Printf("✗ [%d/%d - %.1f%%] %s failed in %v: %v\n", current, total, progress, scriptName, duration, err)
 	}
 
-	results <- result
+	return result
 }
 
 func main() {
@@ -89,52 +89,31 @@ func main() {
 		"whitebit.py",
 	}
 
-	fmt.Printf("Starting parallel execution of %d Python scripts...\n", len(pythonScripts))
-	fmt.Println("=" + strings.Repeat("=", 60))
-
-	var wg sync.WaitGroup
-	results := make(chan ScriptResult, len(pythonScripts))
-	var completed int64 = 0
-
-	validScripts := 0
+	validScripts := []string{}
 	for _, script := range pythonScripts {
 		scriptPath := filepath.Join(scriptDir, script)
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 			fmt.Printf("⚠ Skipping %s (file not found)\n", script)
 			continue
 		}
-		validScripts++
+		validScripts = append(validScripts, script)
 	}
+
+	fmt.Printf("Starting sequential execution of %d Python scripts...\n", len(validScripts))
+	fmt.Println("=" + strings.Repeat("=", 60))
 
 	startTime := time.Now()
+	var results []ScriptResult
 
-	for _, script := range pythonScripts {
+	for i, script := range validScripts {
 		scriptPath := filepath.Join(scriptDir, script)
-		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-			continue
+		result := runPythonScript(scriptPath, i+1, len(validScripts))
+		results = append(results, result)
+		
+		if i < len(validScripts)-1 {
+			fmt.Println()
 		}
-
-		wg.Add(1)
-		go runPythonScript(scriptPath, &wg, results, &completed, validScripts)
 	}
-
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			currentCompleted := atomic.LoadInt64(&completed)
-			if currentCompleted < int64(validScripts) {
-				elapsed := time.Since(startTime)
-				progress := float64(currentCompleted) / float64(validScripts) * 100
-				fmt.Printf("\n📊 Progress update: %d/%d completed (%.1f%%) - Elapsed: %v\n", currentCompleted, validScripts, progress, elapsed)
-			} else {
-				break
-			}
-		}
-	}()
-
-	wg.Wait()
-	close(results)
 
 	totalDuration := time.Since(startTime)
 
@@ -144,10 +123,9 @@ func main() {
 
 	successful := 0
 	failed := 0
-
 	var failedScripts []ScriptResult
 
-	for result := range results {
+	for _, result := range results {
 		if result.Success {
 			fmt.Printf("✓ %-15s - %v\n", result.Name, result.Duration)
 			successful++
