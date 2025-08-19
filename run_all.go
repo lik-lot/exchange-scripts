@@ -61,11 +61,7 @@ func main() {
 	}
 
 	pythonScripts := []string{
-		"biconomy.py",
-		"binance.py",
-		"bitget.py",
 		"bitmart.py",
-		"bitrue.py",
 		"btse.py",
 		"bybit.py",
 		"coinbase.py",
