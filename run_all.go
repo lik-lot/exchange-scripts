@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,7 +19,7 @@ type ScriptResult struct {
 	Output   string
 }
 
-func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- ScriptResult) {
+func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- ScriptResult, completed *int64, total int) {
 	defer wg.Done()
 
 	start := time.Now()
@@ -41,10 +42,13 @@ func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- Scrip
 		Output:   string(output),
 	}
 
+	completedCount := atomic.AddInt64(completed, 1)
+	progress := float64(completedCount) / float64(total) * 100
+
 	if err == nil {
-		fmt.Printf("✓ %s completed in %v\n", scriptName, duration)
+		fmt.Printf("✓ %s completed in %v [%d/%d - %.1f%%]\n", scriptName, duration, completedCount, total, progress)
 	} else {
-		fmt.Printf("✗ %s failed in %v: %v\n", scriptName, duration, err)
+		fmt.Printf("✗ %s failed in %v: %v [%d/%d - %.1f%%]\n", scriptName, duration, err, completedCount, total, progress)
 	}
 
 	results <- result
@@ -90,19 +94,44 @@ func main() {
 
 	var wg sync.WaitGroup
 	results := make(chan ScriptResult, len(pythonScripts))
+	var completed int64 = 0
 
-	startTime := time.Now()
-
+	validScripts := 0
 	for _, script := range pythonScripts {
 		scriptPath := filepath.Join(scriptDir, script)
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 			fmt.Printf("⚠ Skipping %s (file not found)\n", script)
 			continue
 		}
+		validScripts++
+	}
+
+	startTime := time.Now()
+
+	for _, script := range pythonScripts {
+		scriptPath := filepath.Join(scriptDir, script)
+		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			continue
+		}
 
 		wg.Add(1)
-		go runPythonScript(scriptPath, &wg, results)
+		go runPythonScript(scriptPath, &wg, results, &completed, validScripts)
 	}
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			currentCompleted := atomic.LoadInt64(&completed)
+			if currentCompleted < int64(validScripts) {
+				elapsed := time.Since(startTime)
+				progress := float64(currentCompleted) / float64(validScripts) * 100
+				fmt.Printf("\n📊 Progress update: %d/%d completed (%.1f%%) - Elapsed: %v\n", currentCompleted, validScripts, progress, elapsed)
+			} else {
+				break
+			}
+		}
+	}()
 
 	wg.Wait()
 	close(results)
