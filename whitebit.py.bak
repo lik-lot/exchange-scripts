@@ -1,6 +1,6 @@
 """
-TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (GEMINI)
-- Auto-collect all symbols from Gemini REST API /v1/symbols
+TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (WHITEBIT)
+- Auto-collect all spot symbols with tradesEnabled=true from WhiteBIT REST API /api/v4/public/markets
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
 """
@@ -12,7 +12,7 @@ from typing import List
 import pandas as pd
 from tvDatafeed import TvDatafeed, Interval
 
-# ▼ Dependencies for automatic GEMINI symbol collection
+# ▼ Dependencies for automatic WHITEBIT symbol collection
 import requests
 from urllib.parse import urljoin
 
@@ -24,22 +24,22 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-GEMINI          = "GEMINI"               # TradingView exchange code (VERIFIED WORKING)
+WHITEBIT        = "WHITEBIT"             # TradingView exchange code
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
-    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_gemini_1m"},
-    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_gemini_5m"},
-    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_gemini_15m"},
-    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_gemini_1h"},
-    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_gemini_4h"},
-    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_gemini_1d"},
+    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_whitebit_1m"},
+    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_whitebit_5m"},
+    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_whitebit_15m"},
+    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_whitebit_1h"},
+    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_whitebit_4h"},
+    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_whitebit_1d"},
 ]
 
 # (Optional) Include only specific quote currencies (empty list = all)
 QUOTE_FILTER = []                        # Empty = include all quote currencies
 
-# (Optional) Manual mapping: "GEMINI API symbol" → "TradingView symbol"
+# (Optional) Manual mapping: "WHITEBIT API symbol" → "TradingView symbol"
 MANUAL_MAP = {
     # Example mappings (adjust if needed)
 }
@@ -50,51 +50,53 @@ logging.basicConfig(
     datefmt="%H:%M:%S"
 )
 
-# ─────────────────── 1. Load Symbols (Direct query from GEMINI) ─────────────────
-GEMINI_API = "https://api.gemini.com"
-SYMBOLS_ENDPOINT = "/v1/symbols"
+# ─────────────────── 1. Load Symbols (Direct query from WHITEBIT) ─────────────────
+WHITEBIT_API = "https://whitebit.com"
+MARKETS_ENDPOINT = "/api/v4/public/markets"
 
-def fetch_gemini_all_spot_symbols() -> List[str]:
+def fetch_whitebit_all_spot_symbols() -> List[str]:
     """
-    Return all symbols from Gemini.
+    Return all spot symbols with tradesEnabled=true from WhiteBIT.
     """
-    url = urljoin(GEMINI_API, SYMBOLS_ENDPOINT)
+    url = urljoin(WHITEBIT_API, MARKETS_ENDPOINT)
 
     try:
         r = requests.get(url, timeout=15)
         r.raise_for_status()
         data = r.json()
 
-        # Gemini returns array of symbol strings directly
-        if not isinstance(data, list):
-            logging.error(f"Gemini API unexpected response format")
+        if not isinstance(data, dict):
+            logging.error(f"WhiteBIT API unexpected response format")
             return []
 
-        symbols_data = data
+        # WhiteBIT returns a dict with symbol as key
+        markets_data = data
 
     except Exception as e:
-        logging.error(f"Failed to fetch Gemini symbols: {e}")
+        logging.error(f"Failed to fetch WhiteBIT symbols: {e}")
         return []
 
     syms = []
-    for symbol_str in symbols_data:
-        # Gemini returns array of symbol strings like "btcusd"
-        if not isinstance(symbol_str, str):
+    for symbol_key, market_info in markets_data.items():
+        # Check if market type is spot and trades are enabled
+        if market_info.get("type") != "spot":
+            continue
+        if not market_info.get("tradesEnabled", False):
             continue
 
-        sym = symbol_str
+        sym = symbol_key
 
         # Apply manual mapping (handle exception cases)
         sym = MANUAL_MAP.get(sym, sym)
 
-        # Convert to uppercase for TradingView compatibility (Gemini symbols are lowercase)
+        # Convert to uppercase for TradingView compatibility
         sym = sym.upper()
         syms.append(sym)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
 
-    logging.info(f"Found {len(unique_syms)} unique symbols from Gemini")
+    logging.info(f"Found {len(unique_syms)} unique tradeable spot symbols from WhiteBIT")
 
     # Log sample symbols for verification
     if unique_syms:
@@ -102,10 +104,9 @@ def fetch_gemini_all_spot_symbols() -> List[str]:
 
     return unique_syms
 
-# Fetch symbols with rate limit delay
-time.sleep(0.1)  # Gemini has low rate limits
-logging.info("Fetching Gemini symbols...")
-symbols = fetch_gemini_all_spot_symbols()
+# Fetch symbols
+logging.info("Fetching WhiteBIT symbols...")
+symbols = fetch_whitebit_all_spot_symbols()
 
 if not symbols:
     logging.error("No symbols found. Exiting.")
@@ -141,7 +142,6 @@ def wait_for_slot():
 
     recent_calls.append(time.perf_counter())
     time.sleep(random.uniform(*JITTER_RANGE))       # Additional jitter
-    time.sleep(0.1)  # Extra delay for Gemini's low rate limits
 
 # ─────────────────── 4. Main Loop ────────────────
 # Track statistics
@@ -178,7 +178,7 @@ for idx, sym in enumerate(symbols, 1):
 
                 df = tv.get_hist(
                     symbol=sym,
-                    exchange=GEMINI,
+                    exchange=WHITEBIT,
                     interval=tf["interval"],
                     n_bars=N_BARS
                 )
@@ -243,11 +243,11 @@ print(f"Total failures: {total_failed}")
 print(f"Overall success rate: {overall_success_rate:.1f}%")
 
 # Create a summary file
-summary_file = "gemini_collection_summary.txt"
+summary_file = "whitebit_collection_summary.txt"
 with open(summary_file, "w") as f:
-    f.write(f"Gemini Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"WhiteBIT Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     f.write("="*70 + "\n\n")
-    f.write(f"Exchange: GEMINI\n")
+    f.write(f"Exchange: WHITEBIT\n")
     f.write(f"Total symbols: {len(symbols)}\n")
     f.write(f"Timeframes: {', '.join(tf['suffix'] for tf in TIMEFRAMES)}\n")
     f.write(f"Bars per symbol: {N_BARS}\n\n")

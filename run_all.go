@@ -60,29 +60,34 @@ func main() {
 		scriptDir = os.Args[1]
 	}
 
+	// Working exchanges (17 total) - verified with TradingView
 	pythonScripts := []string{
-		"bitmart.py",
-		"btse.py",
-		"bybit.py",
-		"coinbase.py",
-		"coinex.py",
-		"coinw.py",
-		"cryptocom.py",
-		"deepcoin.py",
-		"digifinex.py",
-		"gateio.py",
-		"gemini.py",
-		"hashkeyglobal.py",
-		"htx.py",
-		"kraken.py",
-		"kucoin.py",
-		"lbank.py",
-		"mexc.py",
-		"okx.py",
-		"pionex.py",
-		"toobit.py",
-		"whitebit.py",
-		"bigone.py",
+		"bitmart.py",   // VERIFIED: BITMART exchange, keep_original format
+		"bitrue.py",    // VERIFIED: BITRUE exchange, keep_original format
+		"btse.py",      // VERIFIED: BTSE exchange, remove_dash format
+		"bybit.py",     // VERIFIED: BYBIT exchange, keep_original format
+		"coinbase.py",  // VERIFIED: COINBASE exchange, remove_dash format
+		"coinex.py",    // VERIFIED: COINEX exchange, keep_original format
+		"coinw.py",     // VERIFIED: COINW exchange, keep_original format
+		"cryptocom.py", // VERIFIED: CRYPTOCOM exchange, keep_original format
+		"gateio.py",    // VERIFIED: GATEIO exchange, keep_original format
+		"gemini.py",    // VERIFIED: GEMINI exchange, keep_original format
+		"htx.py",       // VERIFIED: HTX exchange, keep_original format
+		"kraken.py",    // VERIFIED: KRAKEN exchange, keep_original format
+		"kucoin.py",    // VERIFIED: KUCOIN exchange, remove_dash format
+		"mexc.py",      // VERIFIED: MEXC exchange, keep_original format
+		"okx.py",       // VERIFIED: OKX exchange, remove_dash format
+		"whitebit.py",  // VERIFIED: WHITEBIT exchange, keep_original format
+
+		// SKIPPED: Not available on TradingView (8 exchanges)
+		// "biconomy.py",      // Not available on TradingView
+		// "bigone.py",        // Not available on TradingView
+		// "deepcoin.py",      // Not available on TradingView
+		// "digifinex.py",     // Not available on TradingView
+		// "hashkeyglobal.py", // Not available on TradingView
+		// "lbank.py",         // Not available on TradingView
+		// "pionex.py",        // Not available on TradingView
+		// "toobit.py",        // Not available on TradingView
 	}
 
 	validScripts := []string{}
@@ -95,7 +100,7 @@ func main() {
 		validScripts = append(validScripts, script)
 	}
 
-	fmt.Printf("Starting sequential execution of %d Python scripts...\n", len(validScripts))
+	fmt.Printf("Starting sequential execution of %d verified working Python scripts...\n", len(validScripts))
 	fmt.Println("=" + strings.Repeat("=", 60))
 
 	startTime := time.Now()

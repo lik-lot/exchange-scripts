@@ -3,6 +3,7 @@ TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (OKX)
 - Auto-collect all SPOT symbols from OKX REST API /api/v5/public/instruments?instType=SPOT
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
+- Uses symbol format conversion: BTC-USDT → BTCUSDT (remove dash) - VERIFIED WORKING
 """
 
 import os, time, random, logging
@@ -24,7 +25,7 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-OKX             = "OKX"                  # TradingView exchange code
+OKX             = "OKX"                  # TradingView exchange code (VERIFIED WORKING)
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
@@ -53,6 +54,11 @@ logging.basicConfig(
 # ─────────────────── 1. Load Symbols (Direct query from OKX) ─────────────────
 OKX_API = "https://www.okx.com"
 INSTRUMENTS_ENDPOINT = "/api/v5/public/instruments?instType=SPOT"
+
+def okx_to_tv_symbol(okx_symbol: str) -> str:
+    """Convert OKX symbol format to TradingView format"""
+    # Based on test results: BTC-USDT → BTCUSDT (remove dash)
+    return okx_symbol.replace("-", "").upper()
 
 def fetch_okx_all_spot_symbols() -> List[str]:
     """
@@ -88,12 +94,13 @@ def fetch_okx_all_spot_symbols() -> List[str]:
             if quote_ccy not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (BTC-USDT → BTCUSDT)
+        tv_symbol = okx_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))

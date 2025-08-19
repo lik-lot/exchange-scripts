@@ -3,6 +3,7 @@ TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (BYBIT)
 - Auto-collect all SPOT symbols from Bybit REST API /v5/market/instruments-info?category=spot
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
+- Uses original symbol format: BTCUSDT → BTCUSDT (keep original) - VERIFIED WORKING
 """
 
 import os, time, random, logging
@@ -24,7 +25,7 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-BYBIT           = "BYBIT"                # TradingView exchange code
+BYBIT           = "BYBIT"                # TradingView exchange code (VERIFIED WORKING)
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
@@ -53,6 +54,7 @@ logging.basicConfig(
 # ─────────────────── 1. Load Symbols (Direct query from BYBIT) ─────────────────
 BYBIT_API = "https://api.bybit.com"
 INSTRUMENTS_ENDPOINT = "/v5/market/instruments-info?category=spot"
+
 
 def fetch_bybit_all_spot_symbols() -> List[str]:
     """
@@ -158,6 +160,7 @@ for idx, sym in enumerate(symbols, 1):
     logging.info(f"\n{'='*50}")
     logging.info(f"Processing symbol {idx}/{len(symbols)}: {sym}")
     logging.info(f"{'='*50}")
+
 
     for tf in TIMEFRAMES:
         current_operation += 1

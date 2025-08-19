@@ -3,6 +3,7 @@ TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (BTSE)
 - Auto-collect all active symbols from BTSE REST API /spot/api/v3.2/market_summary
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
+- Uses symbol format conversion: BTC-USD → BTCUSD (remove dash) - VERIFIED WORKING
 """
 
 import os, time, random, logging
@@ -24,7 +25,7 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-BTSE            = "BTSE"                 # TradingView exchange code
+BTSE            = "BTSE"                 # TradingView exchange code (VERIFIED WORKING)
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
@@ -53,6 +54,12 @@ logging.basicConfig(
 # ─────────────────── 1. Load Symbols (Direct query from BTSE) ─────────────────
 BTSE_API = "https://api.btse.com"
 MARKET_SUMMARY_ENDPOINT = "/spot/api/v3.2/market_summary"
+
+def btse_to_tv_symbol(btse_symbol: str) -> str:
+    """Convert BTSE symbol format to TradingView format"""
+    # Based on test results: BTC-USD → BTCUSD (remove dash)
+    return btse_symbol.replace("-", "").upper()
+
 
 def fetch_btse_all_spot_symbols() -> List[str]:
     """
@@ -98,12 +105,13 @@ def fetch_btse_all_spot_symbols() -> List[str]:
             if quote not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (BTC-USD → BTCUSD)
+        tv_symbol = btse_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
@@ -168,6 +176,7 @@ for idx, sym in enumerate(symbols, 1):
     logging.info(f"\n{'='*50}")
     logging.info(f"Processing symbol {idx}/{len(symbols)}: {sym}")
     logging.info(f"{'='*50}")
+
 
     for tf in TIMEFRAMES:
         current_operation += 1

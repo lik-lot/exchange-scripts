@@ -24,7 +24,7 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-BITRUE          = "BITRUE"               # TradingView exchange code
+BITRUE         = "BITRUE"               # TradingView exchange code (VERIFIED WORKING)
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [

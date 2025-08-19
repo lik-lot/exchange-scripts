@@ -1,6 +1,6 @@
 """
-TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (GEMINI)
-- Auto-collect all symbols from Gemini REST API /v1/symbols
+TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (COINW)
+- Auto-collect all symbols from CoinW REST API /api/v1/public?command=returnTicker
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
 """
@@ -12,7 +12,7 @@ from typing import List
 import pandas as pd
 from tvDatafeed import TvDatafeed, Interval
 
-# ▼ Dependencies for automatic GEMINI symbol collection
+# ▼ Dependencies for automatic COINW symbol collection
 import requests
 from urllib.parse import urljoin
 
@@ -24,22 +24,28 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-GEMINI          = "GEMINI"               # TradingView exchange code (VERIFIED WORKING)
+COINW           = "COINW"                # TradingView exchange code
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
-    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_gemini_1m"},
-    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_gemini_5m"},
-    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_gemini_15m"},
-    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_gemini_1h"},
-    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_gemini_4h"},
-    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_gemini_1d"},
+    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_coinw_1m"},
+    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_coinw_5m"},
+    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_coinw_15m"},
+    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_coinw_1h"},
+    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_coinw_4h"},
+    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_coinw_1d"},
+]
+
+# Mirror URLs for CoinW
+MIRROR_URLS = [
+    "https://api.coinw.com",
+    "https://api.coinw.pw"
 ]
 
 # (Optional) Include only specific quote currencies (empty list = all)
 QUOTE_FILTER = []                        # Empty = include all quote currencies
 
-# (Optional) Manual mapping: "GEMINI API symbol" → "TradingView symbol"
+# (Optional) Manual mapping: "COINW API symbol" → "TradingView symbol"
 MANUAL_MAP = {
     # Example mappings (adjust if needed)
 }
@@ -50,51 +56,51 @@ logging.basicConfig(
     datefmt="%H:%M:%S"
 )
 
-# ─────────────────── 1. Load Symbols (Direct query from GEMINI) ─────────────────
-GEMINI_API = "https://api.gemini.com"
-SYMBOLS_ENDPOINT = "/v1/symbols"
+# ─────────────────── 1. Load Symbols (Direct query from COINW) ─────────────────
+TICKER_ENDPOINT = "/api/v1/public?command=returnTicker"
 
-def fetch_gemini_all_spot_symbols() -> List[str]:
+def fetch_coinw_all_spot_symbols() -> List[str]:
     """
-    Return all symbols from Gemini.
+    Return all symbols from CoinW.
     """
-    url = urljoin(GEMINI_API, SYMBOLS_ENDPOINT)
+    for base_url in MIRROR_URLS:
+        url = urljoin(base_url, TICKER_ENDPOINT)
 
-    try:
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        data = r.json()
+        try:
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
+            data = r.json()
 
-        # Gemini returns array of symbol strings directly
-        if not isinstance(data, list):
-            logging.error(f"Gemini API unexpected response format")
-            return []
+            if "data" not in data:
+                logging.error(f"CoinW API unexpected response format from {base_url}")
+                continue
 
-        symbols_data = data
+            ticker_data = data.get("data", {})
+            break
 
-    except Exception as e:
-        logging.error(f"Failed to fetch Gemini symbols: {e}")
-        return []
-
-    syms = []
-    for symbol_str in symbols_data:
-        # Gemini returns array of symbol strings like "btcusd"
-        if not isinstance(symbol_str, str):
+        except Exception as e:
+            logging.warning(f"Failed to fetch CoinW symbols from {base_url}: {e}")
+            if base_url == MIRROR_URLS[-1]:  # Last URL
+                logging.error("Failed to fetch from all CoinW mirror URLs")
+                return []
             continue
 
-        sym = symbol_str
+    syms = []
+    for symbol_key, ticker_info in ticker_data.items():
+        # Symbol key is the trading pair
+        sym = symbol_key
 
         # Apply manual mapping (handle exception cases)
         sym = MANUAL_MAP.get(sym, sym)
 
-        # Convert to uppercase for TradingView compatibility (Gemini symbols are lowercase)
+        # Convert to uppercase for TradingView compatibility
         sym = sym.upper()
         syms.append(sym)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
 
-    logging.info(f"Found {len(unique_syms)} unique symbols from Gemini")
+    logging.info(f"Found {len(unique_syms)} unique symbols from CoinW")
 
     # Log sample symbols for verification
     if unique_syms:
@@ -102,10 +108,9 @@ def fetch_gemini_all_spot_symbols() -> List[str]:
 
     return unique_syms
 
-# Fetch symbols with rate limit delay
-time.sleep(0.1)  # Gemini has low rate limits
-logging.info("Fetching Gemini symbols...")
-symbols = fetch_gemini_all_spot_symbols()
+# Fetch symbols
+logging.info("Fetching CoinW symbols...")
+symbols = fetch_coinw_all_spot_symbols()
 
 if not symbols:
     logging.error("No symbols found. Exiting.")
@@ -141,7 +146,6 @@ def wait_for_slot():
 
     recent_calls.append(time.perf_counter())
     time.sleep(random.uniform(*JITTER_RANGE))       # Additional jitter
-    time.sleep(0.1)  # Extra delay for Gemini's low rate limits
 
 # ─────────────────── 4. Main Loop ────────────────
 # Track statistics
@@ -178,7 +182,7 @@ for idx, sym in enumerate(symbols, 1):
 
                 df = tv.get_hist(
                     symbol=sym,
-                    exchange=GEMINI,
+                    exchange=COINW,
                     interval=tf["interval"],
                     n_bars=N_BARS
                 )
@@ -243,11 +247,11 @@ print(f"Total failures: {total_failed}")
 print(f"Overall success rate: {overall_success_rate:.1f}%")
 
 # Create a summary file
-summary_file = "gemini_collection_summary.txt"
+summary_file = "coinw_collection_summary.txt"
 with open(summary_file, "w") as f:
-    f.write(f"Gemini Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"CoinW Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     f.write("="*70 + "\n\n")
-    f.write(f"Exchange: GEMINI\n")
+    f.write(f"Exchange: COINW\n")
     f.write(f"Total symbols: {len(symbols)}\n")
     f.write(f"Timeframes: {', '.join(tf['suffix'] for tf in TIMEFRAMES)}\n")
     f.write(f"Bars per symbol: {N_BARS}\n\n")

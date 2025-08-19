@@ -1,6 +1,6 @@
 """
-TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (GEMINI)
-- Auto-collect all symbols from Gemini REST API /v1/symbols
+TradingView tvDatafeed v2.x  Multi-Timeframe Data Collection (MEXC)
+- Auto-collect all TRADING symbols from MEXC REST API /api/v3/exchangeInfo
 - Extracts multiple timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 - Rate-limit (4 calls/sec), random jitter, exponential back-off retry included
 """
@@ -12,7 +12,7 @@ from typing import List
 import pandas as pd
 from tvDatafeed import TvDatafeed, Interval
 
-# ▼ Dependencies for automatic GEMINI symbol collection
+# ▼ Dependencies for automatic MEXC symbol collection
 import requests
 from urllib.parse import urljoin
 
@@ -24,22 +24,22 @@ MAX_REQ_PER_SEC = 4                      # Maximum calls per second
 JITTER_RANGE    = (0.05, 0.15)           # Random delay before/after each call (seconds)
 MAX_RETRIES     = 4                      # Maximum retries (0.5→1→2→4 s)
 N_BARS          = 5_000                  # Number of bars to fetch
-GEMINI          = "GEMINI"               # TradingView exchange code (VERIFIED WORKING)
+MEXC            = "MEXC"                 # TradingView exchange code
 
 # Timeframes to collect with their respective intervals and save directories
 TIMEFRAMES = [
-    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_gemini_1m"},
-    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_gemini_5m"},
-    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_gemini_15m"},
-    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_gemini_1h"},
-    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_gemini_4h"},
-    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_gemini_1d"},
+    {"interval": Interval.in_1_minute,  "suffix": "1m",  "dir": "data_mexc_1m"},
+    {"interval": Interval.in_5_minute,  "suffix": "5m",  "dir": "data_mexc_5m"},
+    {"interval": Interval.in_15_minute, "suffix": "15m", "dir": "data_mexc_15m"},
+    {"interval": Interval.in_1_hour,    "suffix": "1h",  "dir": "data_mexc_1h"},
+    {"interval": Interval.in_4_hour,    "suffix": "4h",  "dir": "data_mexc_4h"},
+    {"interval": Interval.in_daily,     "suffix": "1d",  "dir": "data_mexc_1d"},
 ]
 
 # (Optional) Include only specific quote currencies (empty list = all)
 QUOTE_FILTER = []                        # Empty = include all quote currencies
 
-# (Optional) Manual mapping: "GEMINI API symbol" → "TradingView symbol"
+# (Optional) Manual mapping: "MEXC API symbol" → "TradingView symbol"
 MANUAL_MAP = {
     # Example mappings (adjust if needed)
 }
@@ -50,51 +50,66 @@ logging.basicConfig(
     datefmt="%H:%M:%S"
 )
 
-# ─────────────────── 1. Load Symbols (Direct query from GEMINI) ─────────────────
-GEMINI_API = "https://api.gemini.com"
-SYMBOLS_ENDPOINT = "/v1/symbols"
+# ─────────────────── 1. Load Symbols (Direct query from MEXC) ─────────────────
+MEXC_API = "https://api.mexc.com"
+EXCHANGE_INFO_ENDPOINT = "/api/v3/exchangeInfo"
 
-def fetch_gemini_all_spot_symbols() -> List[str]:
+def fetch_mexc_all_spot_symbols() -> List[str]:
     """
-    Return all symbols from Gemini.
+    Return all TRADING symbols from MEXC with status = '1' or 'ENABLED' or 'ONLINE'
+    and isSpotTradingAllowed = True.
     """
-    url = urljoin(GEMINI_API, SYMBOLS_ENDPOINT)
+    url = urljoin(MEXC_API, EXCHANGE_INFO_ENDPOINT)
 
     try:
-        r = requests.get(url, timeout=15)
+        r = requests.get(url, timeout=30)
         r.raise_for_status()
         data = r.json()
 
-        # Gemini returns array of symbol strings directly
-        if not isinstance(data, list):
-            logging.error(f"Gemini API unexpected response format")
-            return []
-
-        symbols_data = data
+        symbols_data = data.get("symbols", [])
 
     except Exception as e:
-        logging.error(f"Failed to fetch Gemini symbols: {e}")
+        logging.error(f"Failed to fetch MEXC symbols: {e}")
         return []
 
     syms = []
-    for symbol_str in symbols_data:
-        # Gemini returns array of symbol strings like "btcusd"
-        if not isinstance(symbol_str, str):
+    for s in symbols_data:
+        # Check symbol status - should be active
+        status = s.get("status", "")
+        if status not in ["1", "ENABLED", "ONLINE"]:
             continue
 
-        sym = symbol_str
+        # Check if spot trading is allowed
+        if not s.get("isSpotTradingAllowed", False):
+            continue
+
+        # Check permissions - must include SPOT
+        permissions = s.get("permissions", [])
+        if "SPOT" not in permissions:
+            continue
+
+        # Get the symbol name
+        sym = s.get("symbol", "")
+        if not sym:
+            continue
+
+        # Apply quote currency filter if specified
+        if QUOTE_FILTER:
+            quote_asset = s.get("quoteAsset", "")
+            if quote_asset not in QUOTE_FILTER:
+                continue
 
         # Apply manual mapping (handle exception cases)
         sym = MANUAL_MAP.get(sym, sym)
 
-        # Convert to uppercase for TradingView compatibility (Gemini symbols are lowercase)
+        # Convert to uppercase for TradingView compatibility
         sym = sym.upper()
         syms.append(sym)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
 
-    logging.info(f"Found {len(unique_syms)} unique symbols from Gemini")
+    logging.info(f"Found {len(unique_syms)} unique tradeable symbols from MEXC")
 
     # Log sample symbols for verification
     if unique_syms:
@@ -102,10 +117,9 @@ def fetch_gemini_all_spot_symbols() -> List[str]:
 
     return unique_syms
 
-# Fetch symbols with rate limit delay
-time.sleep(0.1)  # Gemini has low rate limits
-logging.info("Fetching Gemini symbols...")
-symbols = fetch_gemini_all_spot_symbols()
+# Fetch symbols
+logging.info("Fetching MEXC symbols...")
+symbols = fetch_mexc_all_spot_symbols()
 
 if not symbols:
     logging.error("No symbols found. Exiting.")
@@ -141,7 +155,6 @@ def wait_for_slot():
 
     recent_calls.append(time.perf_counter())
     time.sleep(random.uniform(*JITTER_RANGE))       # Additional jitter
-    time.sleep(0.1)  # Extra delay for Gemini's low rate limits
 
 # ─────────────────── 4. Main Loop ────────────────
 # Track statistics
@@ -178,7 +191,7 @@ for idx, sym in enumerate(symbols, 1):
 
                 df = tv.get_hist(
                     symbol=sym,
-                    exchange=GEMINI,
+                    exchange=MEXC,
                     interval=tf["interval"],
                     n_bars=N_BARS
                 )
@@ -243,11 +256,11 @@ print(f"Total failures: {total_failed}")
 print(f"Overall success rate: {overall_success_rate:.1f}%")
 
 # Create a summary file
-summary_file = "gemini_collection_summary.txt"
+summary_file = "mexc_collection_summary.txt"
 with open(summary_file, "w") as f:
-    f.write(f"Gemini Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"MEXC Collection Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     f.write("="*70 + "\n\n")
-    f.write(f"Exchange: GEMINI\n")
+    f.write(f"Exchange: MEXC\n")
     f.write(f"Total symbols: {len(symbols)}\n")
     f.write(f"Timeframes: {', '.join(tf['suffix'] for tf in TIMEFRAMES)}\n")
     f.write(f"Bars per symbol: {N_BARS}\n\n")
