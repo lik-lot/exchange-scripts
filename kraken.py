@@ -55,6 +55,11 @@ logging.basicConfig(
 KRAKEN_API = "https://api.kraken.com"
 ASSET_PAIRS_ENDPOINT = "/0/public/AssetPairs"
 
+def kraken_to_tv_symbol(kraken_symbol: str) -> str:
+    """Convert Kraken symbol format to TradingView format"""
+    # Remove slashes: 1INCH/EUR → 1INCHEUR, BTC/USD → BTCUSD
+    return kraken_symbol.replace("/", "").upper()
+
 def fetch_kraken_all_spot_symbols() -> List[str]:
     """
     Return all tradeable symbols from KRAKEN.
@@ -94,12 +99,13 @@ def fetch_kraken_all_spot_symbols() -> List[str]:
             if quote not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (remove slashes)
+        tv_symbol = kraken_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
