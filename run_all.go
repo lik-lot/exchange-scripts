@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -18,21 +17,19 @@ type ScriptResult struct {
 	Output   string
 }
 
-func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- ScriptResult) {
-	defer wg.Done()
-
+func runPythonScript(scriptPath string, current int, total int) ScriptResult {
 	start := time.Now()
 	scriptName := filepath.Base(scriptPath)
 	scriptName = strings.TrimSuffix(scriptName, ".py")
 
-	fmt.Printf("🔄 Starting %s...\n", scriptName)
+	progress := float64(current) / float64(total) * 100
+	fmt.Printf("🔄 [%d/%d - %.1f%%] Starting %s...\n", current, total, progress, scriptName)
 	fmt.Printf("📋 Output from %s:\n", scriptName)
 	fmt.Println(strings.Repeat("-", 40))
 
 	cmd := exec.Command("python3", scriptPath)
 	cmd.Dir = filepath.Dir(scriptPath)
 	
-	// Stream output in real-time
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -49,12 +46,12 @@ func runPythonScript(scriptPath string, wg *sync.WaitGroup, results chan<- Scrip
 
 	fmt.Println(strings.Repeat("-", 40))
 	if err == nil {
-		fmt.Printf("✓ %s completed in %v\n", scriptName, duration)
+		fmt.Printf("✓ [%d/%d - %.1f%%] %s completed in %v\n", current, total, progress, scriptName, duration)
 	} else {
-		fmt.Printf("✗ %s failed in %v: %v\n", scriptName, duration, err)
+		fmt.Printf("✗ [%d/%d - %.1f%%] %s failed in %v: %v\n", current, total, progress, scriptName, duration, err)
 	}
 
-	results <- result
+	return result
 }
 
 func main() {
@@ -103,27 +100,20 @@ func main() {
 		validScripts = append(validScripts, script)
 	}
 
-	fmt.Printf("Starting parallel execution of %d verified working Python scripts...\n", len(validScripts))
+	fmt.Printf("Starting sequential execution of %d verified working Python scripts...\n", len(validScripts))
 	fmt.Println("=" + strings.Repeat("=", 60))
 
-	var wg sync.WaitGroup
-	results := make(chan ScriptResult, len(validScripts))
-
 	startTime := time.Now()
-
-	for _, script := range validScripts {
-		scriptPath := filepath.Join(scriptDir, script)
-		wg.Add(1)
-		go runPythonScript(scriptPath, &wg, results)
-	}
-
-	wg.Wait()
-	close(results)
-
-	// Collect results
 	var scriptResults []ScriptResult
-	for result := range results {
+
+	for i, script := range validScripts {
+		scriptPath := filepath.Join(scriptDir, script)
+		result := runPythonScript(scriptPath, i+1, len(validScripts))
 		scriptResults = append(scriptResults, result)
+		
+		if i < len(validScripts)-1 {
+			fmt.Println()
+		}
 	}
 
 	totalDuration := time.Since(startTime)
