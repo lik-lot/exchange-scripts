@@ -54,6 +54,11 @@ logging.basicConfig(
 WHITEBIT_API = "https://whitebit.com"
 MARKETS_ENDPOINT = "/api/v4/public/ticker"
 
+def whitebit_to_tv_symbol(whitebit_symbol: str) -> str:
+    """Convert WhiteBIT symbol format to TradingView format"""
+    # Remove underscores: 1INCH_BTC → 1INCHBTC
+    return whitebit_symbol.replace("_", "").upper()
+
 def fetch_whitebit_all_spot_symbols() -> List[str]:
     """
     Return all spot symbols with tradesEnabled=true from WhiteBIT.
@@ -84,12 +89,13 @@ def fetch_whitebit_all_spot_symbols() -> List[str]:
 
         sym = symbol_key
 
+        # Convert to TradingView format (remove underscores)
+        tv_symbol = whitebit_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))

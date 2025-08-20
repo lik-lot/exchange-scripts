@@ -59,6 +59,17 @@ logging.basicConfig(
 # ─────────────────── 1. Load Symbols (Direct query from COINW) ─────────────────
 TICKER_ENDPOINT = "/api/v1/public?command=returnTicker"
 
+def is_valid_symbol(symbol: str) -> bool:
+    """Check if symbol is valid for TradingView (no special characters)"""
+    # Skip symbols with special characters that TradingView doesn't support
+    invalid_chars = ['$', '(', ')', '[', ']', '{', '}', '@', '#', '%']
+    return not any(char in symbol for char in invalid_chars)
+
+def coinw_to_tv_symbol(coinw_symbol: str) -> str:
+    """Convert CoinW symbol format to TradingView format"""
+    # Remove underscores: 1INCH_USDT → 1INCHUSDT
+    return coinw_symbol.replace("_", "").upper()
+
 def fetch_coinw_all_spot_symbols() -> List[str]:
     """
     Return all symbols from CoinW.
@@ -90,15 +101,28 @@ def fetch_coinw_all_spot_symbols() -> List[str]:
         # Symbol key is the trading pair
         sym = symbol_key
 
+        # Skip symbols with special characters
+        if not is_valid_symbol(sym):
+            continue
+            
+        # Convert to TradingView format (remove underscores)
+        tv_symbol = coinw_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
+    
+    # Prioritize major symbols (move them to front of list)
+    major_symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'ADAUSDC', 'SOLUSDT', 'BNBUSDT', 'DOGEUSDT', 'LTCUSDT', 'XRPUSDT']
+    priority_symbols = [s for s in major_symbols if s in unique_syms]
+    other_symbols = [s for s in unique_syms if s not in major_symbols]
+    
+    # Return major symbols first, then others
+    unique_syms = priority_symbols + other_symbols
 
     logging.info(f"Found {len(unique_syms)} unique symbols from CoinW")
 

@@ -54,6 +54,11 @@ logging.basicConfig(
 GATEIO_API = "https://api.gateio.ws"
 CURRENCY_PAIRS_ENDPOINT = "/api/v4/spot/currency_pairs"
 
+def gateio_to_tv_symbol(gateio_symbol: str) -> str:
+    """Convert Gate.io symbol format to TradingView format"""
+    # Remove underscores: 10SET_USDT → 10SETUSDT
+    return gateio_symbol.replace("_", "").upper()
+
 def fetch_gateio_all_spot_symbols() -> List[str]:
     """
     Return all tradeable symbols from Gate.io.
@@ -93,12 +98,13 @@ def fetch_gateio_all_spot_symbols() -> List[str]:
             if quote not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (remove underscores)
+        tv_symbol = gateio_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))

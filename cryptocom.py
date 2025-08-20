@@ -54,6 +54,11 @@ logging.basicConfig(
 CRYPTOCOM_API = "https://api.crypto.com"
 INSTRUMENTS_ENDPOINT = "/exchange/v1/public/get-instruments"
 
+def cryptocom_to_tv_symbol(cryptocom_symbol: str) -> str:
+    """Convert Crypto.com symbol format to TradingView format"""
+    # Remove underscores: 1INCH_USD → 1INCHUSD
+    return cryptocom_symbol.replace("_", "").upper()
+
 def fetch_cryptocom_all_spot_symbols() -> List[str]:
     """
     Return all active symbols from Crypto.com.
@@ -77,9 +82,10 @@ def fetch_cryptocom_all_spot_symbols() -> List[str]:
 
     syms = []
     for s in instruments_data:
-        # Include SPOT and MARGIN instruments (exclude futures/perpetuals)
+        # Include CCY_PAIR instruments (spot trading pairs)
+        # Exclude PERPETUAL_SWAP (futures) and other derivatives
         inst_type = s.get("inst_type", "")
-        if inst_type not in ["SPOT", "MARGIN"]:
+        if inst_type != "CCY_PAIR":
             continue
             
         # Get the symbol name (Crypto.com uses 'symbol' field)
@@ -89,21 +95,22 @@ def fetch_cryptocom_all_spot_symbols() -> List[str]:
 
         # Apply quote currency filter if specified
         if QUOTE_FILTER:
-            quote_currency = s.get("quote_currency", "")
-            if quote_currency not in QUOTE_FILTER:
+            quote_ccy = s.get("quote_ccy", "")
+            if quote_ccy not in QUOTE_FILTER:
                 continue
 
+        # Convert to TradingView format (remove underscores)
+        tv_symbol = cryptocom_to_tv_symbol(sym)
+        
         # Apply manual mapping (handle exception cases)
-        sym = MANUAL_MAP.get(sym, sym)
+        tv_symbol = MANUAL_MAP.get(tv_symbol, tv_symbol)
 
-        # Convert to uppercase for TradingView compatibility
-        sym = sym.upper()
-        syms.append(sym)
+        syms.append(tv_symbol)
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
 
-    logging.info(f"Found {len(unique_syms)} unique symbols from Crypto.com")
+    logging.info(f"Found {len(unique_syms)} unique CCY_PAIR (spot) symbols from Crypto.com")
 
     # Log sample symbols for verification
     if unique_syms:

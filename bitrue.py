@@ -93,6 +93,14 @@ def fetch_bitrue_all_spot_symbols() -> List[str]:
 
     # Remove duplicates and sort
     unique_syms = sorted(set(syms))
+    
+    # Prioritize major symbols (move them to front of list)
+    major_symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'BNBUSDT', 'DOGEUSDT', 'LTCUSDT', 'XRPUSDT']
+    priority_symbols = [s for s in major_symbols if s in unique_syms]
+    other_symbols = [s for s in unique_syms if s not in major_symbols]
+    
+    # Return major symbols first, then others
+    unique_syms = priority_symbols + other_symbols
 
     logging.info(f"Found {len(unique_syms)} unique symbols from Bitrue")
 
